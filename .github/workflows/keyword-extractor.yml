@@ -26,11 +26,15 @@ jobs:
       - name: Setup Chrome and GeoIP
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip xvfb libxi6 libgconf-2-4
+          sudo apt-get install -y unzip xvfb libxi6
           
-          # Install Chrome
+          # Modern Chrome installation compatible with newer Ubuntu
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt install ./google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
+          
+          # Set locale to US
+          sudo apt-get install -y locales
+          sudo locale-gen en_US.UTF-8
           
           # Use a US proxy if needed (optional, using environment variables)
           echo "Setting up for US-based searches"
