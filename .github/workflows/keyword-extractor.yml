@@ -1,4 +1,4 @@
-name: Google Search Data Extractor
+name: US Google Search Data Extractor
 
 on:
   workflow_dispatch:  # Allows manual triggering
@@ -22,14 +22,69 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install selenium beautifulsoup4 webdriver-manager pandas requests fake-useragent tqdm
+          
+      - name: Setup Chrome and GeoIP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip xvfb libxi6 libgconf-2-4
+          
+          # Install Chrome
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install ./google-chrome-stable_current_amd64.deb
+          
+          # Use a US proxy if needed (optional, using environment variables)
+          echo "Setting up for US-based searches"
 
       - name: Run extraction script
         run: python scripts/keyword_extractor.py
+        env:
+          COUNTRY: "us"
+        
+      - name: Clean up data
+        run: |
+          python - <<EOF
+          import json
+          import os
+          from pathlib import Path
+          
+          data_dir = Path("data")
+          
+          # Process all JSON files in the data directory
+          for file_path in data_dir.glob("*.json"):
+              if file_path.name == "summary_report.json":
+                  continue
+                  
+              try:
+                  with open(file_path, "r") as f:
+                      data = json.load(f)
+                      
+                  # Clean up "people_also_search_for" data
+                  if "people_also_search_for" in data:
+                      # Remove entries with common unwanted phrases
+                      unwanted = ["more products", "see more", "view all", "shop now", "curbside", "pick up today"]
+                      data["people_also_search_for"] = [
+                          item for item in data["people_also_search_for"] 
+                          if item and not any(phrase in item.lower() for phrase in unwanted)
+                      ]
+                      
+                      # Remove entries that are just numbers or very short
+                      data["people_also_search_for"] = [
+                          item for item in data["people_also_search_for"] 
+                          if len(item) > 3 and not item.replace(".", "").isdigit()
+                      ]
+                      
+                  # Write the cleaned data back
+                  with open(file_path, "w") as f:
+                      json.dump(data, f, indent=2)
+                      
+              except Exception as e:
+                  print(f"Error processing {file_path}: {e}")
+          EOF
         
       - name: Commit and push results
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add data/
-          git commit -m "Update keyword data $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git commit -m "Update US keyword data $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push
